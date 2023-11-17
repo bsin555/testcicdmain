@@ -1,0 +1,62 @@
+variables:
+  # This will suppress any download for dependencies and plugins or upload messages which would clutter the console log.
+  # `showDateTime` will show the passed time in milliseconds. Need to specify `--batch-mode` to make this work.
+  MAVEN_OPTS: "-Dhttps.protocols=TLSv1.2 -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN -Dorg.slf4j.simpleLogger.showDateTime=true -Djava.awt.headless=true"
+  # As of Maven 3.3.0 instead of this you may define these options in `.mvn/maven.config` so the same config is used
+  # when running from the command line.
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version"
+
+  # Other test configuration parameters
+  BS_BUILD_NUMBER: "${CI_PROJECT_NAME}_${CI_PIPELINE_IID}"
+
+# Template uses jdk8 for verifying and deploying images
+image: maven:3.3.9-jdk-8
+
+# Cache downloaded dependencies and plugins between builds.
+# To keep cache across branches add 'key: "$CI_JOB_NAME"'
+cache:
+  paths:
+    - .m2/repository
+
+# declaration of the stages
+stages:
+  - deploy
+
+pages:
+  stage: deploy
+  before_script:
+    - java -version
+    - whoami
+    - chmod +x ./OS/linux/BrowserStackLocal
+    - echo "-+-+-+-+-+-+-+-+-+-+-+-+- BS BUILD NUMBER - $BS_BUILD_NUMBER -+-+-+-+-+-+-+-+-+-+-+-+-"
+    - echo "-+-+-+-+-+-+-+-+-+-+-+-+- TARGETED APP URL - $APP_URL -+-+-+-+-+-+-+-+-+-+-+-+--+-+-+-"
+    - echo "-+-+-+-+-+-+-+-+-+-+-+-+- JOB - $CI_JOB_NAME          -+-+-+-+-+-+-+-+-+-+-+-+--+-+-+-"
+  script:
+    - nohup ./OS/linux/BrowserStackLocal --key BDATjosDXCxK1yMb9x3Y --local-identifier $BS_BUILD_NUMBER & mvn $MAVEN_CLI_OPTS verify -P UserManagement -Dbuildnumber=$BS_BUILD_NUMBER -Dos=Windows -Dos_version=10 -Dbrowser=Chrome -Dbs_local=true -DbsIdentifier=$BS_BUILD_NUMBER
+    - echo "-+-+-+-+-+-+-+-+-+-+-+-+- CI_PIPELINE_ID - $CI_PIPELINE_ID -+-+-+-+-+-+-+-+-+-+-+-+-"
+    # Make a public folder for the gitlab page to be created
+    - ls -l
+    - mkdir -p public
+    - mkdir -p public/$CI_PIPELINE_ID
+    # Moving the contents of the report folder inside a public under the same folder name as the report
+    - mv ./target/site/serenity/* public/$CI_PIPELINE_ID
+    - cd public
+    - ls -l
+    - cd $CI_PIPELINE_ID
+    - ls -l
+    - cd ..
+    - cd ..
+    - rm -r public/*
+    - cd public
+    - ls -l
+  #Cache is required so that we have the report folder created from each pipeline. This allows us to list the files in the index html.
+  allow_failure: true
+  cache:
+    paths:
+      - public
+  artifacts:
+    name: "$CI_PIPELINE_ID"
+    expire_in: 2 day
+    when: always
+    paths:
+      - public
