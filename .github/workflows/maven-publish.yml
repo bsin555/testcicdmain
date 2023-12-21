@@ -5,6 +5,10 @@ name: Maven Package
 
 on:
   workflow_dispatch:
+    inputs: 
+      Channel:
+        type: string
+        description: 'Select a channel to run'
   push:
     branches: [ "main" ]
   pull_request:
